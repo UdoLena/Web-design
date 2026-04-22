@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ОПИТУВАЛЬНИК</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="bg">
+      <div class="blob b1"></div>
+      <div class="blob b2"></div>
+      <div class="grid"></div>
+    </div>
+
+    <header class="top">
+      <div class="brand" @click="goTo('#home')">
+        <div class="logo"><img src="assets/logo.png" alt="ОПИТУВАЛЬНИК"></div>
+        <div class="brandText">
+          <div class="name">ОПИТУВАЛЬНИК</div>
+          <div class="tag">теми • голосування • акаунт</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="chip" @click="goTo('#home')">Головна</button>
+        <button class="chip" @click="goTo('#create')">Створити</button>
+        <button class="chip" @click="goTo('#open')">Відкрити</button>
+        <button class="chip" @click="goTo('#about')">Про сайт</button>
+        <button class="chip" @click="goTo(currentUser ? '#profile' : '#auth')">
+          {{ currentUser ? 'Акаунт' : 'Вхід/Реєстрація' }}
+        </button>
+        <button class="chip danger" v-show="!!currentUser" @click="logoutUser">Вийти</button>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <!-- HOME -->
+      <section class="card" v-show="currentView === 'home'">
+        <div class="cardHead">
+          <h1>Опитування</h1>
+          <p>Обери тему, пройди опитування, подивись результати. Для голосування потрібен акаунт.</p>
+        </div>
+
+        <div class="row">
+          <div class="stat">
+            <div class="statNum">{{ stats.pollsCount }}</div>
+            <div class="statLbl">опитувань у базі</div>
+          </div>
+          <div class="stat">
+            <div class="statNum">{{ stats.votesCount }}</div>
+            <div class="statLbl">всього голосів</div>
+          </div>
+          <div class="stat">
+            <div class="statNum">{{ stats.usersCount }}</div>
+            <div class="statLbl">користувачів</div>
+          </div>
+        </div>
+
+        <div class="cardSub">
+          <div class="subHead">
+            <h2>Каталог</h2>
+
+            <div class="actions">
+              <div class="pillSelect">
+                <span>Тема:</span>
+                <select v-model="selectedTopic">
+                  <option value="Усі">Усі</option>
+                  <option v-for="topic in topics" :key="topic" :value="topic">{{ topic }}</option>
+                </select>
+              </div>
+              <button class="btn" @click="goTo('#create')">+ Створити</button>
+            </div>
+          </div>
+
+          <div class="list">
+            <div class="item" v-for="poll in filteredPolls" :key="poll.id">
+              <div>
+                <div class="t">{{ poll.title }}</div>
+                <div class="m">
+                  <span class="tagPill">{{ poll.topic }}</span>
+                  &nbsp; id: {{ poll.id }} • votes: {{ poll.totalVotes || 0 }} • {{ poll.multi ? 'multi' : 'single' }}
+                  <span v-if="completedPollIds.has(poll.id)"> • ✅ пройдено</span>
+                </div>
+              </div>
+              <div class="right">
+                <button class="btn small ghost" @click="goTo('#poll=' + poll.id)">Відкрити</button>
+                <button class="btn small ghost" @click="goTo('#results=' + poll.id)">Результати</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="hint" style="display:block;" v-if="filteredPolls.length === 0">
+            Нічого не знайдено по цій темі.
+          </div>
+        </div>
+      </section>
+
+      <!-- CREATE -->
+      <section class="card" v-show="currentView === 'create'">
+        <div class="cardHead">
+          <h1>Створення опитування</h1>
+          <p>Питання + 2–10 варіантів. Можна обрати тему.</p>
+        </div>
+
+        <form class="form" novalidate @submit.prevent="submitCreateForm">
+          <div class="field">
+            <label>Тема</label>
+            <div class="two">
+              <select v-model="createForm.topicSelect" class="input">
+                <option v-for="topic in createTopics" :key="topic" :value="topic">{{ topic }}</option>
+              </select>
+              <input
+                v-if="createForm.topicSelect === 'Інше'"
+                v-model="createForm.topicCustom"
+                class="input"
+                placeholder="Інша тема (якщо вибрав “Інша”)"
+                maxlength="40"
+              >
+            </div>
+            <div class="err">{{ errors.createTopic || '' }}</div>
+          </div>
+
+          <div class="field">
+            <label>Питання</label>
+            <input
+              v-model="createForm.title"
+              class="input"
+              maxlength="120"
+              placeholder="Напр: Яка піца найкраща?"
+            />
+            <div class="err">{{ errors.createTitle || '' }}</div>
+          </div>
+
+          <div class="field">
+            <div class="fieldRow">
+              <label>Варіанти</label>
+              <button class="btn small ghost" type="button" @click="addOptionRow">+ Додати</button>
+            </div>
+
+            <div>
+              <div class="opt" v-for="(option, index) in createForm.options" :key="index">
+                <input
+                  class="input"
+                  placeholder="Варіант відповіді..."
+                  maxlength="60"
+                  v-model="createForm.options[index]"
+                />
+                <button type="button" class="x" title="видалити" @click="removeOptionRow(index)">✕</button>
+              </div>
+            </div>
+
+            <div class="err">{{ errors.createOptions || '' }}</div>
+          </div>
+
+          <div class="fieldRow">
+            <label class="check">
+              <input type="checkbox" v-model="createForm.multi" />
+              <span>Дозволити вибір кількох варіантів</span>
+            </label>
+
+            <label class="check">
+              <input type="checkbox" v-model="createForm.anon" />
+              <span>Анонімне (не показувати автора)</span>
+            </label>
+          </div>
+
+          <div class="formActions">
+            <button class="btn ghost" type="button" @click="goTo('#home')">Скасувати</button>
+            <button class="btn" type="submit">Створити</button>
+          </div>
+
+          <div class="banner" v-show="banners.create">{{ banners.create }}</div>
+        </form>
+      </section>
+
+      <!-- OPEN -->
+      <section class="card" v-show="currentView === 'open'">
+        <div class="cardHead">
+          <h1>Відкрити опитування</h1>
+          <p>Встав ID або посилання виду <span class="pill">#poll=ID</span>.</p>
+        </div>
+
+        <div class="form">
+          <div class="field">
+            <label>ID або посилання</label>
+            <input
+              v-model="openValue"
+              class="input"
+              placeholder="Напр: a1b2c3d4 або https://...#poll=a1b2c3d4"
+            />
+            <div class="err">{{ errors.open || '' }}</div>
+          </div>
+
+          <div class="formActions">
+            <button class="btn ghost" type="button" @click="goTo('#home')">Назад</button>
+            <button class="btn" type="button" @click="openPollByInput">Відкрити</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- POLL -->
+      <section class="card" v-if="currentView === 'poll' && activePoll">
+        <div class="pill">
+          topic: {{ activePoll.topic }} • id: {{ activePoll.id }} • {{ activePoll.multi ? 'multi' : 'single' }} • votes: {{ activePoll.totalVotes || 0 }}
+        </div>
+
+        <div class="cardHead">
+          <h1>{{ activePoll.title }}</h1>
+          <p>
+            <template v-if="!currentUser">
+              ❌ Реєстрація/вхід не пройдені. Увійди або зареєструйся, щоб пройти опитування.
+            </template>
+            <template v-else-if="pollHasVoted">
+              ✅ Ти вже проходив це опитування.
+            </template>
+            <template v-else>
+              {{ activePoll.multi ? 'Можна обрати кілька варіантів.' : 'Можна обрати лише один варіант.' }}
+            </template>
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panelTitle">Варіанти</div>
+
+          <div class="choices">
+            <label class="choice" v-for="option in activePoll.options" :key="option.id">
+              <input
+                :type="activePoll.multi ? 'checkbox' : 'radio'"
+                name="voteOption"
+                :value="option.id"
+                :checked="selectedVoteOptions.includes(option.id)"
+                @change="toggleVoteOption(option.id, activePoll.multi)"
+              />
+              <span>{{ option.text }}</span>
+            </label>
+          </div>
+
+          <div class="formActions">
+            <button class="btn ghost" type="button" @click="goTo('#home')">Назад</button>
+            <button class="btn" type="button" @click="submitVote">Голосувати</button>
+            <button class="btn ghost" type="button" @click="goTo('#results=' + activePoll.id)">Результати</button>
+            <button class="btn danger" type="button" @click="deletePoll">Видалити</button>
+          </div>
+
+          <div class="banner" v-show="banners.vote">{{ banners.vote }}</div>
+
+          <div class="share">
+            <div class="shareLbl">Поділитись:</div>
+            <div class="shareRow">
+              <div class="shareLink">{{ shareLink }}</div>
+              <button class="btn small ghost" @click="copyLink">Копіювати</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RESULTS -->
+      <section class="card" v-if="currentView === 'results' && resultsPoll">
+        <div class="pill">
+          topic: {{ resultsPoll.topic }} • id: {{ resultsPoll.id }} • votes: {{ resultsPoll.totalVotes || 0 }}
+        </div>
+
+        <div class="cardHead">
+          <h1>{{ resultsPoll.title }}</h1>
+          <p>Гістограма результатів (у відсотках і голосах).</p>
+        </div>
+
+        <div class="bars">
+          <div class="bar" v-for="option in resultsPoll.options" :key="option.id">
+            <div class="barTop">
+              <strong>{{ option.text }}</strong>
+              <span>{{ option.votes }} голосів • {{ getPercent(option.votes, resultsPoll.totalVotes) }}%</span>
+            </div>
+            <div class="track">
+              <div class="fill" :style="{ width: getPercent(option.votes, resultsPoll.totalVotes) + '%' }"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="formActions">
+          <button class="btn ghost" type="button" @click="goTo('#poll=' + resultsPoll.id)">Назад до опитування</button>
+          <button class="btn" type="button" @click="goTo('#home')">На головну</button>
+        </div>
+      </section>
+
+      <!-- PROFILE -->
+      <section class="card" v-if="currentView === 'profile' && profile">
+        <div class="cardHead">
+          <h1>Акаунт</h1>
+          <p>Твій профіль, статистика та пройдені опитування.</p>
+        </div>
+
+        <div class="pill">
+          user: {{ profile.user.email }} • created: {{ formatDate(profile.user.createdAt) }}
+        </div>
+
+        <div class="profileTop">
+          <div class="profileCard">
+            <div class="avatar">👤</div>
+            <div>
+              <div class="pName">{{ profile.user.name || '—' }}</div>
+              <div class="pEmail">{{ profile.user.email || '—' }}</div>
+              <div class="pChips">
+                <span class="pChip">{{ profile.user.gender || '—' }}</span>
+                <span class="pChip">{{ profile.user.dob || '—' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpis">
+            <div class="kpi">
+              <div class="kNum">{{ profile.profileStats.completedCount ?? 0 }}</div>
+              <div class="kLbl">пройдено опитувань</div>
+            </div>
+            <div class="kpi">
+              <div class="kNum">{{ profile.profileStats.votesCast ?? 0 }}</div>
+              <div class="kLbl">голосів від тебе</div>
+            </div>
+            <div class="kpi">
+              <div class="kNum">{{ profile.profileStats.topTopic || '—' }}</div>
+              <div class="kLbl">топ-тема</div>
+            </div>
+            <div class="kpi">
+              <div class="kNum">{{ profile.profileStats.completionPct ?? 0 }}%</div>
+              <div class="kLbl">покриття каталогу</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panelTitle">Пройдені (останні 30)</div>
+
+          <div class="list" v-if="profile.completedPolls.length">
+            <div class="item" v-for="item in profile.completedPolls" :key="item.id + item.completedAt">
+              <div>
+                <div class="t">{{ item.title }}</div>
+                <div class="m">
+                  <span class="tagPill">{{ item.topic }}</span>
+                  &nbsp; id: {{ item.id }} • {{ item.completedAt }}
+                </div>
+              </div>
+              <div class="right">
+                <button class="btn small ghost" @click="goTo('#poll=' + item.id)">Відкрити</button>
+                <button class="btn small ghost" @click="goTo('#results=' + item.id)">Результати</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="hint" style="display:block;" v-else>
+            Поки немає пройдених опитувань.
+          </div>
+
+          <div class="formActions" style="margin-top:14px;">
+            <button class="btn danger" type="button" @click="resetMyStats">Скинути мою статистику</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABOUT -->
+      <section class="card" v-show="currentView === 'about'">
+        <div class="cardHead">
+          <h1>Про цей сайт</h1>
+          <p><b>ОПИТУВАЛЬНИК</b> — це простий сайт для створення та проходження опитувань.</p>
+        </div>
+
+        <div class="panel">
+          <div class="panelTitle">Як це працює</div>
+          <ul class="aboutList">
+            <li>На <b>Головній</b> — каталог опитувань і фільтр по темам.</li>
+            <li>У <b>Створити</b> — додаєш питання та варіанти відповіді.</li>
+            <li>У <b>Відкрити</b> — вводиш ID або посилання на опитування.</li>
+            <li>Щоб <b>пройти опитування</b> (проголосувати) — потрібна реєстрація/вхід.</li>
+          </ul>
+          <div class="hint" style="display:block;margin-top:10px;">
+            Дані зберігаються у базі даних SQLite на сервері.
+          </div>
+          <div class="formActions" style="margin-top:14px;">
+            <button class="btn ghost" type="button" @click="goTo('#home')">На головну</button>
+            <button class="btn" type="button" @click="goTo('#auth')">Вхід/Реєстрація</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- AUTH -->
+      <section class="card" v-show="currentView === 'auth'">
+        <div class="cardHead">
+          <h1>Вхід / Реєстрація</h1>
+          <p>Створи акаунт, щоб голосувати та бачити свій профіль.</p>
+        </div>
+
+        <div class="authTabs">
+          <button class="chip" @click="authTab = 'login'">Вхід</button>
+          <button class="chip" @click="authTab = 'register'">Реєстрація</button>
+        </div>
+
+        <div class="authGrid">
+          <div class="panel" v-show="authTab === 'login'">
+            <div class="panelTitle">Вхід</div>
+            <form class="form" novalidate @submit.prevent="loginUser">
+              <div class="field">
+                <label>Email</label>
+                <input v-model="loginForm.email" class="input" type="email" placeholder="name@email.com" />
+                <div class="err">{{ errors.loginEmail || '' }}</div>
+              </div>
+
+              <div class="field">
+                <label>Пароль</label>
+                <input v-model="loginForm.password" class="input" type="password" placeholder="••••" />
+                <div class="err">{{ errors.loginPassword || '' }}</div>
+              </div>
+
+              <div class="formActions">
+                <button class="btn ghost" type="button" @click="goTo('#home')">На головну</button>
+                <button class="btn" type="submit">Увійти</button>
+              </div>
+
+              <div class="banner" v-show="banners.login">{{ banners.login }}</div>
+            </form>
+          </div>
+
+          <div class="panel" v-show="authTab === 'register'">
+            <div class="panelTitle">Реєстрація</div>
+            <form class="form" novalidate @submit.prevent="registerUser">
+              <div class="field">
+                <label>Ім'я</label>
+                <input v-model="registerForm.name" class="input" maxlength="40" placeholder="Твоє ім'я" />
+                <div class="err">{{ errors.regName || '' }}</div>
+              </div>
+
+              <div class="field">
+                <label>Email</label>
+                <input v-model="registerForm.email" class="input" type="email" placeholder="name@email.com" />
+                <div class="err">{{ errors.regEmail || '' }}</div>
+              </div>
+
+              <div class="field">
+                <label>Пароль</label>
+                <input v-model="registerForm.password" class="input" type="password" placeholder="мінімум 4 символи" />
+                <div class="err">{{ errors.regPassword || '' }}</div>
+              </div>
+
+              <div class="two">
+                <div class="field">
+                  <label>Дата народження</label>
+                  <input v-model="registerForm.dob" class="input" type="date" />
+                </div>
+
+                <div class="field">
+                  <label>Стать</label>
+                  <div class="radioRow">
+                    <label class="radio">
+                      <input type="radio" value="Чоловіча" v-model="registerForm.gender">
+                      <span>Чоловіча</span>
+                    </label>
+                    <label class="radio">
+                      <input type="radio" value="Жіноча" v-model="registerForm.gender">
+                      <span>Жіноча</span>
+                    </label>
+                    <label class="radio">
+                      <input type="radio" value="Інше" v-model="registerForm.gender">
+                      <span>Інше</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="formActions">
+                <button type="button" class="btn ghost" @click="goTo('#home')">На головну</button>
+                <button type="submit" class="btn">Зареєструватись</button>
+              </div>
+
+              <div class="banner" v-show="banners.register">{{ banners.register }}</div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>© 2026 ОПИТУВАЛЬНИК</span>
+      <span class="dot">•</span>
+      <span>дані на сервері</span>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/vue@3"></script>
+  <script src="app.js"></script>
+</body>
+</html>
